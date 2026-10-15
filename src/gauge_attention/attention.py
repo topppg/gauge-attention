@@ -13,6 +13,7 @@ from .functional import (
     connection_to_absolute_phases,
     pairwise_transport_phases,
     rope_connection,
+    rope_frequencies,
     rotate_pairs,
 )
 
@@ -163,6 +164,49 @@ class _ProjectedAttention(nn.Module):
         q, k, v = self._project(x)
         q, k, v = self._position_qkv(q, k, v)
         return self._finish(q, k, v, mask=mask, is_causal=is_causal)
+
+
+class NoPositionAttention(_ProjectedAttention):
+    """A small position-free reference used to check the zero connection case."""
+
+
+class RoPEAttention(_ProjectedAttention):
+    """A minimal Rotary Position Embedding reference implementation."""
+
+    def __init__(
+        self,
+        embed_dim: int,
+        n_heads: int,
+        *,
+        dropout: float = 0.0,
+        bias: bool = False,
+        base: float = 10_000.0,
+    ) -> None:
+        super().__init__(embed_dim, n_heads, dropout=dropout, bias=bias)
+        if base <= 0:
+            raise ValueError("base must be positive")
+        self.base = base
+
+    def absolute_phases(
+        self,
+        seq_len: int,
+        *,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> torch.Tensor:
+        """Return RoPE phases with shape ``(heads, positions, coordinate_pairs)``."""
+        if seq_len < 1:
+            raise ValueError("seq_len must be positive")
+        frequencies = rope_frequencies(self.head_dim, base=self.base, device=device, dtype=dtype)
+        positions = torch.arange(seq_len, device=device, dtype=frequencies.dtype)
+        phases = positions[:, None] * frequencies[None, :]
+        return phases[None, :, :].expand(self.n_heads, -1, -1)
+
+    def _position_qkv(
+        self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        phases = self.absolute_phases(q.shape[-2], device=q.device, dtype=q.dtype)[None, ...]
+        return rotate_pairs(q, phases), rotate_pairs(k, phases), v
 
 
 class GaugeAttention(_ProjectedAttention):

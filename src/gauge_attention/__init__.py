@@ -1,6 +1,6 @@
 """Gauge-inspired learned rotary transport for PyTorch attention."""
 
-from .attention import GaugeAttention
+from .attention import GaugeAttention, NoPositionAttention, RoPEAttention
 from .functional import (
     connection_to_absolute_phases,
     pairwise_transport_phases,
@@ -11,6 +11,8 @@ from .functional import (
 
 __all__ = [
     "GaugeAttention",
+    "NoPositionAttention",
+    "RoPEAttention",
     "connection_to_absolute_phases",
     "pairwise_transport_phases",
     "rope_connection",
